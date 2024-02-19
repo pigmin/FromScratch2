@@ -1,4 +1,4 @@
-import { AxesViewer, Color3, MeshBuilder, StandardMaterial, Vector3 } from '@babylonjs/core';
+import { AxesViewer, Color3, MeshBuilder, Quaternion, StandardMaterial, Vector3 } from '@babylonjs/core';
 
 const SPEED = 5.0;
 
@@ -99,11 +99,12 @@ class Player {
     move(delta) {
 
         if (this.moveDirection.length() != 0) {
+
+            //Petit bonus , on regarde dans la direction du mouvement (attention meme space donc ici on se contente de déplacer le vecteur cela peut ne pas convenir à toutes les situations)
+            this.mesh.lookAt(this.mesh.position.add(this.moveDirection));
             
-            this.moveDirection.scaleInPlace(SPEED * delta);
-
+            this.moveDirection.scaleInPlace(SPEED * delta);            
             this.mesh.position.addInPlace(this.moveDirection);
-
         }
     }
 
