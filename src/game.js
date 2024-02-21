@@ -1,11 +1,13 @@
-import { AxesViewer, BoundingInfo, Color3, Color4, DefaultRenderingPipeline, FreeCamera, HemisphericLight, KeyboardEventTypes, MeshBuilder, MotionBlurPostProcess, Scalar, Scene, SceneLoader, Sound, StandardMaterial, Texture, Vector3 } from "@babylonjs/core";
+import { Color3, Color4, CubeTexture, DirectionalLight, FreeCamera, HemisphericLight, KeyboardEventTypes, Scene, ShadowGenerator, Sound, Vector3 } from "@babylonjs/core";
 import { Inspector } from "@babylonjs/inspector";
 
 import musicUrl from "../assets/musics/Cyberpunk Moonlight Sonata v2.mp3";
 
-import obstacle1Url from "../assets/models/ice_cube.glb";
 import Player from './player';
-import { GridMaterial } from '@babylonjs/materials';
+import Arena from './arena';
+import { GlobalManager } from './globalmanager';
+
+import envSpecularUrl from "../assets/env/environmentSpecular.env";
 
 class Game {
 
@@ -19,29 +21,35 @@ class Game {
     startTimer;
 
     player;
+    arena;
 
     inputMap = {};
     actions = {};
 
+    bInspector = false;
+
     constructor(engine, canvas) {
-        this.engine = engine;
-        this.canvas = canvas;
+        GlobalManager.engine = engine;
+        GlobalManager.canvas = canvas;
     }
 
     async init() {
-        this.engine.displayLoadingUI();
+        GlobalManager.engine.displayLoadingUI();
         await this.createScene();
 
-        this.player = new Player(this.scene, this.camera);
-        
+        this.arena = new Arena();
+        await this.arena.init();
+
+        this.player = new Player(this.arena.getSpawnPoint());
+        await this.player.init();
 
         this.initKeyboard();
 
-        this.engine.hideLoadingUI();
+        GlobalManager.engine.hideLoadingUI();
     }
 
     initKeyboard() {
-        this.scene.onKeyboardObservable.add((kbInfo) => {
+        GlobalManager.scene.onKeyboardObservable.add((kbInfo) => {
             switch (kbInfo.type) {
                 case KeyboardEventTypes.KEYDOWN:
                     this.inputMap[kbInfo.event.code] = true;
@@ -60,25 +68,36 @@ class Game {
 
         await this.init();
 
-        Inspector.Show(this.scene, {});
-
+        
         this.startTimer = 0;
-        this.engine.runRenderLoop(() => {
+        GlobalManager.engine.runRenderLoop(() => {
 
-                let delta = this.engine.getDeltaTime() / 1000.0;
+                GlobalManager.update();
+                
 
-                this.update(delta);
+                this.update();
 
 
+                if (this.actions["KeyI"]) {
+                    if (this.bInspector) {
+                        Inspector.Hide();
+                    }
+                    else {
+                        Inspector.Show(GlobalManager.scene, {});
+                    }
+                    this.bInspector = !this.bInspector;
+                }
                 //Reset actions
                 this.actions = {};
-                this.scene.render();
+                GlobalManager.scene.render();
         });
     }
 
     update(delta) {
 
-        this.player.update(delta, this.inputMap, this.actions);
+        this.arena.update();
+
+        this.player.update(this.inputMap, this.actions);
 
 
         this.startTimer += delta;
@@ -87,32 +106,48 @@ class Game {
     async createScene() {
 
         // This creates a basic Babylon Scene object (non-mesh)
-        this.scene = new Scene(this.engine);
-        this.scene.clearColor = new Color3(0.4, 0.4, 1);
-        this.scene.collisionsEnabled = true;
+        GlobalManager.scene = new Scene(GlobalManager.engine);
+        GlobalManager.scene.clearColor = new Color3(0.4, 0.4, 1);
+        GlobalManager.scene.collisionsEnabled = true;
 
 
         // This creates and positions a free camera (non-mesh)
-        this.camera = new FreeCamera("camera1", new Vector3(0, 5, -10), this.scene);
+        GlobalManager.camera = new FreeCamera("camera1", new Vector3(0, 5, -10), GlobalManager.scene);
 
         // This targets the camera to scene origin
-        this.camera.setTarget(new Vector3(0, 0, 0));
+        GlobalManager.camera.setTarget(new Vector3(0, 0, 0));
 
         // This attaches the camera to the canvas
-        this.camera.attachControl(this.canvas, true);
+        GlobalManager.camera.attachControl(GlobalManager.canvas, true);
 
+        let envOptions = {
+            createGround: false,
+            createSkybox : false,
+            cameraExposure : 0.4,
+            environmentTexture : new CubeTexture(envSpecularUrl, GlobalManager.scene),
+        };
+        GlobalManager.scene.createDefaultEnvironment(envOptions);
+        GlobalManager.scene.environmentIntensity = 0.35;
+        
         // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
-        this.light = new HemisphericLight("light", new Vector3(0, 1, 0), this.scene);
+        let light = new DirectionalLight("light", new Vector3(1, 10, 0), GlobalManager.scene);
+        light.direction = new Vector3(0.45, -0.47, -0.76);
+        light.diffuse = Color3.FromHexString("#703B19");
+        light.autoCalcShadowZBounds = true;
+        light.autoUpdateExtends = true;
 
         // Default intensity is 1. Let's dim the light a small amount
-        this.light.intensity = 1.0;
+        light.intensity = 1.0;
+        GlobalManager.addLight(light);
 
-        let ground = MeshBuilder.CreateGround("ground", {width: 32, height: 32}, this.scene);
-        ground.material = new GridMaterial("groundMat");
+        let shadowGen = new ShadowGenerator(1024, light);
+        shadowGen.useBlurCloseExponentialShadowMap = true;
+        GlobalManager.addShadowGenerator(shadowGen);
 
-        new AxesViewer(this.scene, 5);
+        //new AxesViewer(GlobalManager.scene, 5);
 
-        this.music = new Sound("music", musicUrl, this.scene, undefined, { loop: true, autoplay: false, volume: 0.4 });
+        //TODO : move to sound manager
+        this.music = new Sound("music", musicUrl, GlobalManager.scene, undefined, { loop: true, autoplay: false, volume: 0.4 });
 
     }
 }

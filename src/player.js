@@ -1,15 +1,19 @@
-import { AxesViewer, Color3, MeshBuilder, Quaternion, StandardMaterial, Vector3 } from '@babylonjs/core';
+import { AxesViewer, Color3, MeshBuilder, Quaternion, Scalar, Scene, SceneLoader, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
+import { GlobalManager } from './globalmanager';
 
-const SPEED = 5.0;
+import playerMeshUrl from "../assets/models/vehicule_tout_terrain_low_poly.glb";
+
+const SPEED = 15.0;
+const TURN_SPEED = 4*Math.PI;
 
 class Player {
 
+    transform;
     mesh;
 
     axes;
 
-    scene;
-    camera;
+    spawnPoint;
 
     //Vecteur d'input
     moveInput = new Vector3(0, 0, 0);
@@ -17,31 +21,49 @@ class Player {
     //Vecteur de deplacement
     moveDirection = new Vector3(0, 0, 0);
 
-    constructor(scene, camera) {
-        this.scene = scene;
-        this.camera = camera;
-        this.init();
+    lookDirectionQuaternion = Quaternion.Identity();
+
+    constructor(spawnPoint) {
+        this.spawnPoint = spawnPoint;
     }
 
-    init() {
-        this.mesh = MeshBuilder.CreateBox('playerMesh', {size: 2});
-        this.mesh.material = new StandardMaterial("playerMat", this.scene);
+    async init() {
+        /*this.mesh = MeshBuilder.CreateBox('playerMesh', {size: 2});
+        this.mesh.material = new StandardMaterial("playerMat", GlobalManager.scene);
         this.mesh.material.diffuseColor = new Color3(1, 0, 0);
-        this.mesh.visibility = 0.6;
-        this.mesh.position = new Vector3(3, 1, 2);
+        this.mesh.visibility = 0.6;*/
 
-        this.axes = new AxesViewer(this.scene, 3);
-        this.axes.xAxis.parent = this.mesh;
-        this.axes.yAxis.parent = this.mesh;
-        this.axes.zAxis.parent = this.mesh;
+        this.transform = new TransformNode("player", GlobalManager.scene);
+        this.transform.position = this.spawnPoint.clone();
+
+        const result = await SceneLoader.ImportMeshAsync("", "", playerMeshUrl, GlobalManager.scene);
+        //Attention mesh sans vertices !!
+        this.mesh = result.meshes[0];
+        this.mesh.name = "playerVehicule";
+        this.mesh.rotationQuaternion = Quaternion.Identity();
+        this.mesh.parent = this.transform;
+        this.mesh.position = Vector3.Zero();
+        
+        for (let childMesh of result.meshes) {
+            if ((childMesh.name === "Object_3") ||
+            (childMesh.name === "Object_5") ||
+            (childMesh.name === "Object_4") ||
+            (childMesh.name === "Object_11")) {
+
+                childMesh.receiveShadows = true;
+                GlobalManager.addShadowCaster(childMesh);
+            }
+        }
+
+        //Mesh "Object_11" => Roues
     }
 
-    update(delta, inputMap, actions) {
+    update(inputMap, actions) {
 
         this.getInputs(inputMap, actions);
 
         this.applyCameraToInputs();
-        this.move(delta);
+        this.move();
     }
 
     getInputs(inputMap, actions) {
@@ -76,13 +98,13 @@ class Player {
         if (this.moveInput.length() != 0) {
 
             //Recup le forward de la camera
-            let forward = this.getForwardVector(this.camera);
+            let forward = this.getForwardVector(GlobalManager.camera);
             forward.y = 0;
             forward.normalize();
             forward.scaleInPlace(this.moveInput.z);
 
             //Recup le right de la camera
-            let right = this.getRightVector(this.camera);
+            let right = this.getRightVector(GlobalManager.camera);
             right.y = 0;
             right.normalize();
             right.scaleInPlace(this.moveInput.x);
@@ -93,40 +115,37 @@ class Player {
             //Normalise
             this.moveDirection.normalize();
             
+            Quaternion.FromLookDirectionLHToRef(this.moveDirection, Vector3.UpReadOnly, this.lookDirectionQuaternion);
         }
     }
 
-    move(delta) {
+    move() {
 
         if (this.moveDirection.length() != 0) {
 
-            //Petit bonus , on regarde dans la direction du mouvement (attention meme space donc ici on se contente de déplacer le vecteur cela peut ne pas convenir à toutes les situations)
-            this.mesh.lookAt(this.mesh.position.add(this.moveDirection));
-            
-            this.moveDirection.scaleInPlace(SPEED * delta);            
-            this.mesh.position.addInPlace(this.moveDirection);
+            //Quaternions !!
+            Quaternion.SlerpToRef(this.mesh.rotationQuaternion, this.lookDirectionQuaternion,
+                 TURN_SPEED * GlobalManager.deltaTime, this.mesh.rotationQuaternion);
+
+            this.moveDirection.scaleInPlace(SPEED * GlobalManager.deltaTime);            
+            this.transform.position.addInPlace(this.moveDirection);
         }
     }
 
-    getUpVector(_mesh, refresh) {
-        _mesh.computeWorldMatrix(true, refresh);
-        var up_local = new Vector3(0, 1, 0);
-        const worldMatrix = _mesh.getWorldMatrix();
-        return Vector3.TransformNormal(up_local, worldMatrix);
+    getUpVector(_mesh) {
+        let up_local = _mesh.getDirection(Vector3.UpReadOnly);
+        return up_local.normalize();
     }
 
-    getForwardVector(_mesh, refresh) {
-        _mesh.computeWorldMatrix(true, refresh);
-        var forward_local = new Vector3(0, 0, 1);
-        const worldMatrix = _mesh.getWorldMatrix();
-        return Vector3.TransformNormal(forward_local, worldMatrix).normalize();
+    getForwardVector(_mesh) {
+        let forward_local = _mesh.getDirection(Vector3.LeftHandedForwardReadOnly);
+        return forward_local.normalize();
     }
 
-    getRightVector(_mesh, refresh) {
-        _mesh.computeWorldMatrix(true, refresh);
-        var right_local = new Vector3(1, 0, 0);
-        const worldMatrix = _mesh.getWorldMatrix();
-        return Vector3.TransformNormal(right_local, worldMatrix).normalize();
+    getRightVector(_mesh) {
+       
+        let right_local = _mesh.getDirection(Vector3.RightReadOnly);
+        return right_local.normalize();
     }
 }
 
