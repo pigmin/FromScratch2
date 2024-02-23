@@ -55,6 +55,12 @@ class Player {
             }
         }
 
+        const poignee = this.mesh.getChildTransformNodes().find( (node) => node.name === 'Object_2');
+        let childObj = MeshBuilder.CreateBox("childObj", GlobalManager.scene);
+        childObj.setParent(poignee);
+        childObj.position.set(0, 0, 0);
+        childObj.scaling.set(1, 1, 1)
+
         //Mesh "Object_11" => Roues
     }
 

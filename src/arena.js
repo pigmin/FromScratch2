@@ -2,7 +2,7 @@ import { MeshBuilder, SceneLoader, Vector3 } from '@babylonjs/core';
 import { GridMaterial } from '@babylonjs/materials';
 
 
-import arenaLevel1Url from "../assets/models/arena_level1.glb";
+
 import { GlobalManager } from './globalmanager';
 
 class Arena {
@@ -11,16 +11,25 @@ class Arena {
 
     playerSpawnPoint;
 
+    assetContainer = null;
+
     constructor() {
     }
 
     async init() {
-        /*this.mesh = MeshBuilder.CreateGround("ground", {width: 32, height: 32}, GlobalManager.scene);*/
 
-        const result = await SceneLoader.ImportMeshAsync("", "", arenaLevel1Url, GlobalManager.scene);
-//console.log(result);
+    }
 
-        for (let aNode of result.transformNodes) {
+    async loadLevel(level) {
+
+        if (this.assetContainer != null)
+            this.disposeLevel();
+
+        this.assetContainer = await SceneLoader.LoadAssetContainerAsync("", level.model, GlobalManager.scene);
+
+        this.assetContainer.addAllToScene();
+
+        for (let aNode of this.assetContainer.transformNodes) {
             if (aNode.name.includes("SPAWN_P")) {
                 //Player start 
                 aNode.computeWorldMatrix(true);
@@ -29,16 +38,15 @@ class Arena {
             }
         }
 
-        for (let childMesh of result.meshes) {
+        for (let childMesh of this.assetContainer.meshes) {
 
-            if (childMesh.metadata && childMesh.metadata.gltf && childMesh.metadata.gltf.extras)
-            {
+            if (childMesh.metadata && childMesh.metadata.gltf && childMesh.metadata.gltf.extras) {
                 let extras = childMesh.metadata.gltf.extras;
                 //Recup les datas supp.
-    
-                    console.log(extras);
+
+                console.log(extras);
             }
-                
+
 
 
             if (childMesh.getTotalVertices() > 0) {
@@ -47,12 +55,16 @@ class Arena {
                 GlobalManager.addShadowCaster(childMesh);
             }
             else {
-                
+                //RAS
             }
 
         }
 
 
+    }
+
+    disposeLevel() {
+        this.assetContainer.removeAllFromScene();
     }
 
     getSpawnPoint(playerIndex) {

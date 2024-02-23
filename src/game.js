@@ -9,6 +9,8 @@ import { GlobalManager } from './globalmanager';
 
 import envSpecularUrl from "../assets/env/environmentSpecular.env";
 
+import { levels } from './levels';
+
 class Game {
 
     engine;
@@ -28,22 +30,26 @@ class Game {
 
     bInspector = false;
 
+    currentLevel = 0;
+
     constructor(engine, canvas) {
         GlobalManager.engine = engine;
         GlobalManager.canvas = canvas;
     }
 
     async init() {
-        GlobalManager.engine.displayLoadingUI();
+        
         await this.createScene();
-
+        this.initKeyboard();
+        
+        GlobalManager.engine.displayLoadingUI();
+        
         this.arena = new Arena();
         await this.arena.init();
+        await this.arena.loadLevel(levels[this.currentLevel]);
 
         this.player = new Player(this.arena.getSpawnPoint());
         await this.player.init();
-
-        this.initKeyboard();
 
         GlobalManager.engine.hideLoadingUI();
     }
@@ -77,6 +83,16 @@ class Game {
 
                 this.update();
 
+                if (this.actions["KeyN"]) {
+                    this.currentLevel++;
+                    if (this.currentLevel >= levels.length)
+                        this.currentLevel = 0;
+
+                        GlobalManager.engine.displayLoadingUI();
+                        this.arena.loadLevel(levels[this.currentLevel]);
+                        GlobalManager.engine.hideLoadingUI();
+
+                }
 
                 if (this.actions["KeyI"]) {
                     if (this.bInspector) {
